@@ -82,6 +82,10 @@ void println(char const * const s) {
 // Flags
 int verbose_flag = 0;
 int help_flag = 0;
+int chunk_count = 128;
+int chunk_size = 16;
+int chunk_free_skip = 2;
+
 
 struct malloc_chunk {
     size_t prev_size;   /* Size of previous chunk (if free). */
@@ -158,7 +162,7 @@ struct malloc_state {
     size_t max_system_mem;
 };
 
-#define TCACHE 0x555555559010
+#define TCACHE 0x55555555a010
 #define TCACHE_ENTRY_N 64
 
 struct tcache_perthread_struct {
@@ -252,40 +256,86 @@ void walk_tcache(struct tcache_perthread_struct* tcache){
     }
 }
 
-#define COUNT 128
-#define CHUNK_SIZE 16
-
-int main(int argc, char* argv[]) {
-    // Loop through command-line arguments
+int parse_flags(int argc, char* argv[]){
     for (int i = 1; i < argc; i++) { // Start at 1 because argv[0] is the program name
         if (strcmp(argv[i], "-v") == 0) {
             verbose_flag = 1;
         } else if (strcmp(argv[i], "--help") == 0) {
             help_flag = 1;
+        } if (strcmp(argv[i], "-n") == 0) {
+            // Ensure the next argument is available for the required number option
+            if (i + 1 < argc) {
+                chunk_count = atoi(argv[i + 1]);  // Convert string to integer
+                if (chunk_count == 0 && strcmp(argv[i + 1], "0") != 0) {
+                    println("Error: -n option requires a valid integer value.\n");
+                    exit(EXIT_FAILURE);
+                }
+                i++; // Skip the next argument since we just processed it
+            } else {
+                println("Error: -n option requires an integer value.\n");
+                exit(EXIT_FAILURE);
+            }
+        } if (strcmp(argv[i], "-s") == 0) {
+            // Ensure the next argument is available for the required number option
+            if (i + 1 < argc) {
+                chunk_size = atoi(argv[i + 1]);  // Convert string to integer
+                if (chunk_size == 0 && strcmp(argv[i + 1], "0") != 0) {
+                    println("Error: -s option requires a valid integer value.\n");
+                    exit(EXIT_FAILURE);
+                }
+                i++; // Skip the next argument since we just processed it
+            } else {
+                println("Error: -s option requires an integer value.\n");
+                exit(EXIT_FAILURE);
+            }
+        } if (strcmp(argv[i], "-f") == 0) {
+            // Ensure the next argument is available for the required number option
+            if (i + 1 < argc) {
+                chunk_free_skip = atoi(argv[i + 1]);  // Convert string to integer
+                if (chunk_free_skip == 0 && strcmp(argv[i + 1], "0") != 0) {
+                    println("Error: -f option requires a valid integer value.\n");
+                    exit(EXIT_FAILURE);
+                }
+                i++; // Skip the next argument since we just processed it
+            } else {
+                println("Error: -f option requires an integer value.\n");
+                exit(EXIT_FAILURE);
+            }
         }
     }
 
     if (verbose_flag) {
-        printf("Verbose mode is enabled.\n");
+        println("Verbose mode is enabled.\n");
     }
 
     if (help_flag) {
-        printf("Help flag is enabled.\n");
-        printf("Usage: ./program [options]\n");
-        printf("  -v         Enable verbose mode\n");
-        printf("  --help     Show help message\n");
-        return 0;
+        println("Help flag is enabled.\n");
+        println("Usage: ./program [options]\n");
+        println("  -v         Enable verbose mode\n");
+        println("  --help     Show help message\n");
+        println("  -n [int]   Set the number of chunks to malloc default is 128\n");
+        println("  -s [int]   Byte size of chunks default is 16\n");
+        println("  -f [int]   How many chunks to jump between frees default is 2 meaning skip freeing every other chunk\n");
+        return 1;
     }
+    return 0;
+}
+
+int main(int argc, char* argv[]) {
+
+    printf("%d, %d, %d\n", chunk_count, chunk_size, chunk_free_skip);
+
+    if(parse_flags(argc, argv)) return 0;
 
     struct malloc_state* my_state = (struct malloc_state*)(MAIN_ARENA);
     struct tcache_perthread_struct* my_tcache = (struct tcache_perthread_struct*)(TCACHE);
 
-    struct malloc_chunk* ptrs[COUNT];
+    struct malloc_chunk* ptrs[chunk_count];
 
-    for(int i = 0; i < COUNT; i++){
-        ptrs[i] = malloc_chunk(CHUNK_SIZE);
+    for(int i = 0; i < chunk_count; i++){
+        ptrs[i] = malloc_chunk(chunk_size);
     }
-    for(int i = 0; i < COUNT / 2; i++){
+    for(int i = 0; i < chunk_count; i += chunk_free_skip){
         free_chunk(ptrs[i]);
     }
 
