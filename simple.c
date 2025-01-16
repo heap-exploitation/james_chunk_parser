@@ -310,7 +310,7 @@ int parse_flags(int argc, char* argv[]){
 
     if (help_flag) {
         println("Help flag is enabled.\n");
-        println("Usage: ./program [options]\n");
+        println("Usage: Setarch -R ./program [options]\n");
         println("  -v         Enable verbose mode\n");
         println("  --help     Show help message\n");
         println("  -n [int]   Set the number of chunks to malloc default is 128\n");
