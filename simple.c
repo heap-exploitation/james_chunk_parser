@@ -79,6 +79,10 @@ void println(char const * const s) {
 
 // MY STUFF
 
+// Flags
+int verbose_flag = 0;
+int help_flag = 0;
+
 struct malloc_chunk {
     size_t prev_size;   /* Size of previous chunk (if free). */
     size_t size;        /* Size of this chunk, including metadata. */
@@ -169,13 +173,22 @@ void chunk_loc(struct malloc_chunk* chunk){
     print("Chunk Located in: TCACHE\n");
 }
 
-void print_bin_chain(struct malloc_chunk* chunk, int depth){
-    for (int i = 0; i < depth; i++){
-        print("  ");
+void print_depth(int depth){
+    if(verbose_flag == 1){
+        for (int i = 0; i < depth; i++){
+            print("  ");
+        }
     }
-    println(itoa_hex((uint64_t)chunk));
+}
+
+void print_bin_chain(struct malloc_chunk* chunk, int depth){
     if (chunk < (struct malloc_chunk*)0x7ffff0000000){
+        print_depth(depth);
+        if(verbose_flag == 1) println(itoa_hex((uint64_t)chunk));
         print_bin_chain(chunk->fd, depth + 1);
+    } else {
+        print("END COUNT: ");
+        println(itoa(depth));
     }
 }
 
@@ -184,22 +197,22 @@ void print_bin_chain(struct malloc_chunk* chunk, int depth){
 #define REVEAL_PTR(ptr)  PROTECT_PTR (&ptr, ptr)
 
 void print_protected_bin_chain(struct malloc_chunk* chunk, int depth){
-    for (int i = 0; i < depth; i++){
-        print("  ");
-    }
-    println(itoa_hex((uint64_t)chunk));
+    print_depth(depth);
+    if(verbose_flag == 1) println(itoa_hex((uint64_t)chunk));
     if (REVEAL_PTR(chunk->fd) != NULL){
         print_protected_bin_chain(REVEAL_PTR(chunk->fd), depth + 1);
+    } else {
+        // Give a count
+        print("END COUNT: ");
+        println(itoa(depth + 1));
     }
 }
 
 void print_protected_tcache_chain(void* ptr, int depth){
     if(ptr == NULL) return;
-    for (int i = 0; i < depth; i++){
-        print("  ");
-    }
+    print_depth(depth);
     struct malloc_chunk* chunk = recover_chunk(ptr);
-    println(itoa_hex((uint64_t)chunk));
+    if(verbose_flag == 1) println(itoa_hex((uint64_t)chunk));
     if (REVEAL_PTR(chunk->fd) != NULL){
         // print("PROC: ");
         // println(itoa_hex((uint64_t)chunk->fd));
@@ -209,32 +222,60 @@ void print_protected_tcache_chain(void* ptr, int depth){
 
 void walk_main_arena(struct malloc_state* state){
     for (int i = 0; i < BIN_N; i += 2){
-        print_bin_chain(state->bins[i],0);
+        if (state->bins[i] < (struct malloc_chunk*)0x7ffff0000000){
+            print("E: ");
+            println(itoa(i));
+            print_bin_chain(state->bins[i],0);
+        }
     }
 }
 
 void walk_fast_bins(struct malloc_state* state){
     for (int i = 0; i < FASTBIN_N; i++){
         if(state->fastbinsY[i] != NULL){
+            print("E: ");
+            println(itoa(i));
             print_protected_bin_chain(state->fastbinsY[i],0);
-        } else {
-            print("NULL\n");
         }
     }
 }
 
 void walk_tcache(struct tcache_perthread_struct* tcache){
     for (int i = 0 ; i < TCACHE_ENTRY_N; i++){
-        print("COUNT: ");
-        println(itoa(tcache->counts[i]));
-        print_protected_tcache_chain(tcache->entries[i],0);
+        if (tcache->counts[i] > 0){
+            print("E: ");
+            print(itoa(i));
+            print(" COUNT: ");
+            println(itoa(tcache->counts[i]));
+            print_protected_tcache_chain(tcache->entries[i],0);
+        }
     }
 }
 
-#define COUNT 64
+#define COUNT 128
 #define CHUNK_SIZE 16
 
-int main() {
+int main(int argc, char* argv[]) {
+    // Loop through command-line arguments
+    for (int i = 1; i < argc; i++) { // Start at 1 because argv[0] is the program name
+        if (strcmp(argv[i], "-v") == 0) {
+            verbose_flag = 1;
+        } else if (strcmp(argv[i], "--help") == 0) {
+            help_flag = 1;
+        }
+    }
+
+    if (verbose_flag) {
+        printf("Verbose mode is enabled.\n");
+    }
+
+    if (help_flag) {
+        printf("Help flag is enabled.\n");
+        printf("Usage: ./program [options]\n");
+        printf("  -v         Enable verbose mode\n");
+        printf("  --help     Show help message\n");
+        return 0;
+    }
 
     struct malloc_state* my_state = (struct malloc_state*)(MAIN_ARENA);
     struct tcache_perthread_struct* my_tcache = (struct tcache_perthread_struct*)(TCACHE);
@@ -254,10 +295,6 @@ int main() {
     walk_fast_bins(my_state);
     println("---------------------- TCACHE ----------------------------");
     walk_tcache(my_tcache);
-
-
-    // chunk_loc(ptrs[COUNT]);
-
 }
 
 
