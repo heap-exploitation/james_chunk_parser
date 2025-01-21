@@ -81,6 +81,7 @@ void println(char const * const s) {
 
 // Flags
 int verbose_flag = 0;
+int custom_flag = 0;
 int help_flag = 0;
 int chunk_count = 128;
 int chunk_size = 16;
@@ -260,9 +261,14 @@ int parse_flags(int argc, char* argv[]){
     for (int i = 1; i < argc; i++) { // Start at 1 because argv[0] is the program name
         if (strcmp(argv[i], "-v") == 0) {
             verbose_flag = 1;
-        } else if (strcmp(argv[i], "--help") == 0) {
+        } 
+        if (strcmp(argv[i], "-c") == 0) {
+            custom_flag = 1;
+        }
+        if (strcmp(argv[i], "--help") == 0) {
             help_flag = 1;
-        } if (strcmp(argv[i], "-n") == 0) {
+        }
+        if (strcmp(argv[i], "-n") == 0) {
             // Ensure the next argument is available for the required number option
             if (i + 1 < argc) {
                 chunk_count = atoi(argv[i + 1]);  // Convert string to integer
@@ -275,7 +281,8 @@ int parse_flags(int argc, char* argv[]){
                 println("Error: -n option requires an integer value.\n");
                 exit(EXIT_FAILURE);
             }
-        } if (strcmp(argv[i], "-s") == 0) {
+        }
+        if (strcmp(argv[i], "-s") == 0) {
             // Ensure the next argument is available for the required number option
             if (i + 1 < argc) {
                 chunk_size = atoi(argv[i + 1]);  // Convert string to integer
@@ -288,7 +295,8 @@ int parse_flags(int argc, char* argv[]){
                 println("Error: -s option requires an integer value.\n");
                 exit(EXIT_FAILURE);
             }
-        } if (strcmp(argv[i], "-f") == 0) {
+        }
+        if (strcmp(argv[i], "-f") == 0) {
             // Ensure the next argument is available for the required number option
             if (i + 1 < argc) {
                 chunk_free_skip = atoi(argv[i + 1]);  // Convert string to integer
@@ -312,6 +320,7 @@ int parse_flags(int argc, char* argv[]){
         println("Help flag is enabled.\n");
         println("Usage: Setarch -R ./program [options]\n");
         println("  -v         Enable verbose mode\n");
+        println("  -c         Enable custom free / malloc mode\n");
         println("  --help     Show help message\n");
         println("  -n [int]   Set the number of chunks to malloc default is 128\n");
         println("  -s [int]   Byte size of chunks default is 16\n");
@@ -321,15 +330,7 @@ int parse_flags(int argc, char* argv[]){
     return 0;
 }
 
-int main(int argc, char* argv[]) {
-
-    printf("%d, %d, %d\n", chunk_count, chunk_size, chunk_free_skip);
-
-    if(parse_flags(argc, argv)) return 0;
-
-    struct malloc_state* my_state = (struct malloc_state*)(MAIN_ARENA);
-    struct tcache_perthread_struct* my_tcache = (struct tcache_perthread_struct*)(TCACHE);
-
+void basic_test(){
     struct malloc_chunk* ptrs[chunk_count];
 
     for(int i = 0; i < chunk_count; i++){
@@ -337,6 +338,42 @@ int main(int argc, char* argv[]) {
     }
     for(int i = 0; i < chunk_count; i += chunk_free_skip){
         free_chunk(ptrs[i]);
+    }
+}
+
+void custom_test(){
+    struct malloc_chunk* ptrs[2048];
+
+    for(int i = 0; i < 1024; i++){
+        ptrs[i] = malloc_chunk(256);
+    }
+    for(int i = 1024; i < 2048; i++){
+        ptrs[i] = malloc_chunk(1024);
+    }
+    for(int i = 0; i < 2048; i += chunk_free_skip){
+        free_chunk(ptrs[i]);
+    }
+}
+
+int main(int argc, char* argv[]) {
+    if(parse_flags(argc, argv)) return 0;
+
+    print("n=");
+    print(itoa(chunk_count));
+    print(", s=");
+    print(itoa(chunk_size));
+    print(", f=");
+    print(itoa(chunk_free_skip));
+    print("\n");
+
+
+    struct malloc_state* my_state = (struct malloc_state*)(MAIN_ARENA);
+    struct tcache_perthread_struct* my_tcache = (struct tcache_perthread_struct*)(TCACHE);
+
+    if(custom_flag){
+        custom_test();
+    } else {
+        basic_test();
     }
 
     println("---------------------- MAIN ARENA ----------------------------");
